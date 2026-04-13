@@ -558,6 +558,19 @@ def _read_checkpoint(checkpoint_path):
         ckpt = ckpt["model"]
     elif "state_dict" in ckpt and isinstance(ckpt["state_dict"], dict):
         ckpt = ckpt["state_dict"]
+
+    # Some converted checkpoints flatten wrapper names into the tensor keys
+    # (e.g. "model.detector.*" or "module.model.detector.*"). Strip those
+    # common wrappers so local .pt and converted .safetensors behave the same.
+    prefixes_to_strip = ("module.", "model.")
+    stripped = True
+    while stripped and len(ckpt) > 0:
+        stripped = False
+        for prefix in prefixes_to_strip:
+            if all(k.startswith(prefix) for k in ckpt.keys()):
+                ckpt = {k[len(prefix) :]: v for k, v in ckpt.items()}
+                stripped = True
+                break
     return ckpt
 
 
