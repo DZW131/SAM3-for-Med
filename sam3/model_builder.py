@@ -3,6 +3,7 @@
 # pyre-unsafe
 
 import os
+from pathlib import Path
 from typing import Optional
 
 import pkg_resources
@@ -536,12 +537,33 @@ def _create_sam3_transformer(
     return TransformerWrapper(encoder=encoder, decoder=decoder, d_model=256)
 
 
-def _load_checkpoint(model, checkpoint_path):
-    """Load model checkpoint from file."""
-    with g_pathmgr.open(checkpoint_path, "rb") as f:
-        ckpt = torch.load(f, map_location="cpu", weights_only=True)
+def _read_checkpoint(checkpoint_path):
+    """Read a checkpoint from disk, including optional safetensors support."""
+    checkpoint_path = str(checkpoint_path)
+    suffix = Path(checkpoint_path).suffix.lower()
+    if suffix == ".safetensors":
+        try:
+            from safetensors.torch import load_file
+        except ImportError as exc:
+            raise ImportError(
+                "Loading .safetensors checkpoints requires the `safetensors` package. "
+                "Install it with `pip install safetensors`."
+            ) from exc
+        ckpt = load_file(checkpoint_path, device="cpu")
+    else:
+        with g_pathmgr.open(checkpoint_path, "rb") as f:
+            ckpt = torch.load(f, map_location="cpu", weights_only=True)
+
     if "model" in ckpt and isinstance(ckpt["model"], dict):
         ckpt = ckpt["model"]
+    elif "state_dict" in ckpt and isinstance(ckpt["state_dict"], dict):
+        ckpt = ckpt["state_dict"]
+    return ckpt
+
+
+def _load_checkpoint(model, checkpoint_path):
+    """Load model checkpoint from file."""
+    ckpt = _read_checkpoint(checkpoint_path)
     sam3_image_ckpt = {
         k.replace("detector.", ""): v for k, v in ckpt.items() if "detector" in k
     }
@@ -797,11 +819,7 @@ def build_sam3_video_model(
     if load_from_HF and checkpoint_path is None:
         checkpoint_path = download_ckpt_from_hf(version="sam3")
     if checkpoint_path is not None:
-        with g_pathmgr.open(checkpoint_path, "rb") as f:
-            ckpt = torch.load(f, map_location="cpu", weights_only=True)
-        if "model" in ckpt and isinstance(ckpt["model"], dict):
-            ckpt = ckpt["model"]
-
+        ckpt = _read_checkpoint(checkpoint_path)
         missing_keys, unexpected_keys = model.load_state_dict(
             ckpt, strict=strict_state_dict_loading
         )
@@ -1050,11 +1068,7 @@ def build_sam3_multiplex_video_model(
     if load_from_HF and checkpoint_path is None:
         checkpoint_path = download_ckpt_from_hf(version="sam3.1")
     if checkpoint_path is not None:
-        with g_pathmgr.open(checkpoint_path, "rb") as f:
-            ckpt = torch.load(f, map_location="cpu", weights_only=True)
-        if "model" in ckpt and isinstance(ckpt["model"], dict):
-            ckpt = ckpt["model"]
-
+        ckpt = _read_checkpoint(checkpoint_path)
         missing_keys, unexpected_keys = model.load_state_dict(
             ckpt, strict=strict_state_dict_loading
         )
@@ -1201,9 +1215,7 @@ def build_sam3_multiplex_video_predictor(
     if checkpoint_path is None:
         checkpoint_path = download_ckpt_from_hf(version="sam3.1")
     if checkpoint_path is not None:
-        ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-        if "model" in ckpt and isinstance(ckpt["model"], dict):
-            ckpt = ckpt["model"]
+        ckpt = _read_checkpoint(checkpoint_path)
         # Remap checkpoint keys if needed (internal naming -> OSS naming)
         # HF checkpoints are already remapped; local checkpoints may use old naming
         needs_remap = any(
