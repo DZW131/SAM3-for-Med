@@ -89,8 +89,8 @@ def make_output_path(args):
 
 
 def tensor_to_numpy(state, max_masks=0):
-    scores = state["scores"].detach().cpu().numpy()
-    boxes = state["boxes"].detach().cpu().numpy()
+    scores = state["scores"].detach().float().cpu().numpy()
+    boxes = state["boxes"].detach().float().cpu().numpy()
     masks = state["masks"].detach().cpu().numpy()
 
     if max_masks > 0:

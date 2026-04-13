@@ -582,9 +582,13 @@ def _default_bpe_path():
 def _load_checkpoint(model, checkpoint_path):
     """Load model checkpoint from file."""
     ckpt = _read_checkpoint(checkpoint_path)
-    sam3_image_ckpt = {
-        k.replace("detector.", ""): v for k, v in ckpt.items() if "detector" in k
-    }
+    if any(k.startswith("detector.") for k in ckpt):
+        sam3_image_ckpt = {
+            k.replace("detector.", ""): v for k, v in ckpt.items() if "detector" in k
+        }
+    else:
+        # Image-only checkpoints may already match the Sam3Image module layout.
+        sam3_image_ckpt = ckpt
     if model.inst_interactive_predictor is not None:
         sam3_image_ckpt.update(
             {
